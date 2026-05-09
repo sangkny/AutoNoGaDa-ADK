@@ -11,7 +11,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    service_name: str = "autonaogada-adk"
+    service_name: str = "autonogada-adk"
     version: str = "0.1.0"
     environment: str = "development"
 

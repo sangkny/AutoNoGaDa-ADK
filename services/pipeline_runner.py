@@ -1,14 +1,17 @@
-"""Orchestrator PIPELINE — 코드 생성 + SOFTWARE Ontology 검증."""
+"""Orchestrator PIPELINE — 코드 생성·리뷰·수정 (SOFTWARE 도메인)."""
 from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.fixer import FixerAgent
 from agents.orchestrator import Orchestrator, OrchestraStrategy
-from ontology.base import OntologyDomain
+from agents.reviewer import ReviewResult, ReviewerAgent
+from ontology.base import OntologyDomain, ValidationError
 
 from models.software import CodeTask, TaskReview, TaskStatusEnum
 from services.code_analyzer import CodeAnalyzer
@@ -17,7 +20,7 @@ log = logging.getLogger("services.pipeline_runner")
 
 
 class PipelineRunner:
-    """Planner→Generator→Reviewer→Fixer 파이프라인 (Week 4 스캐폴)."""
+    """생성(generate) · 리뷰(review) · 수정(fix)."""
 
     def __init__(self) -> None:
         self._analyzer = CodeAnalyzer()
@@ -27,8 +30,8 @@ class PipelineRunner:
         db: AsyncSession,
         description: str,
         language: str = "python",
-    ) -> dict:
-        """임시 CodeTask 를 만들고 동일 파이프라인 수행."""
+    ) -> dict[str, Any]:
+        """임시 CodeTask 를 만들고 PIPELINE 실행."""
         task = CodeTask(
             id=str(uuid.uuid4()),
             title=description[:120],
@@ -40,7 +43,7 @@ class PipelineRunner:
         await db.flush()
         return await self.run_task(db, task)
 
-    async def run_task(self, db: AsyncSession, task: CodeTask) -> dict:
+    async def run_task(self, db: AsyncSession, task: CodeTask) -> dict[str, Any]:
         task.status = TaskStatusEnum.RUNNING
         await db.flush()
 
@@ -82,6 +85,8 @@ class PipelineRunner:
             db.add(review)
             await db.flush()
 
+            quality_report = self._quality_report(vr, orch_passed)
+
             log.info(
                 "pipeline 완료 task=%s orch_pass=%s onto=%s",
                 task.id[:8],
@@ -95,13 +100,108 @@ class PipelineRunner:
                 "ontology_passed":   on_pass,
                 "iterations":        iterations,
                 "summary":           vr.summary,
+                "quality_report":    quality_report,
             }
 
-        except Exception as e:
+        except Exception:
             log.exception("pipeline 실패")
             task.status = TaskStatusEnum.FAILED
             await db.flush()
             raise
+
+    def _quality_report(self, vr: Any, orch_passed: bool) -> dict[str, Any]:
+        errs = getattr(vr, "errors", None) or []
+        out_errs: list[dict[str, str]] = []
+        for e in errs[:20]:
+            if isinstance(e, ValidationError):
+                out_errs.append(
+                    {
+                        "code":    e.code,
+                        "message": e.message,
+                        "field":   getattr(e, "field", "") or "",
+                    },
+                )
+            else:
+                out_errs.append({"code": "?", "message": str(e), "field": ""})
+        return {
+            "ontology_passed":      bool(vr.passed),
+            "ontology_summary":     vr.summary,
+            "ontology_errors":      out_errs,
+            "orchestrator_passed":  orch_passed,
+        }
+
+    async def generate(
+        self,
+        db: AsyncSession,
+        task: str,
+        language: str = "python",
+    ) -> dict[str, Any]:
+        """
+        POST /pipeline/generate — 함수 설명 기반 코드 생성 + 품질 리포트.
+        """
+        return await self.run_inline(db, task, language)
+
+    async def review_code(
+        self,
+        code: str,
+        language: str = "python",
+        context: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        POST /pipeline/review — HEAVY ReviewerAgent 로 코드 리뷰.
+        """
+        reviewer = ReviewerAgent(domain=OntologyDomain.SOFTWARE)
+        hint     = context or "제공된 코드의 품질·보안·파이썬 관례를 검토하세요."
+        res      = await reviewer.run(
+            hint,
+            context={"generated": code, "iteration": 0},
+        )
+        if not res.success:
+            return {
+                "passed":         False,
+                "feedback":       res.error or "reviewer 실패",
+                "llm_review":     "",
+                "ontology_passed": None,
+                "ontology_summary": "",
+            }
+
+        review_out: ReviewResult = res.output
+        vr_meta   = await self._analyzer.validate_snippet(code, language)
+        return {
+            "passed":            review_out.passed,
+            "feedback":          review_out.feedback,
+            "llm_review":        review_out.llm_review,
+            "ontology_passed":   bool(vr_meta.passed),
+            "ontology_summary":  vr_meta.summary,
+        }
+
+    async def fix_code(
+        self,
+        code: str,
+        error_message: str,
+        context: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        POST /pipeline/fix — FixerAgent 로 오류/피드백 기반 수정 코드 생성.
+        """
+        review_stub = ReviewResult(
+            passed=False,
+            feedback=error_message,
+            ontology_result=None,
+        )
+        fixer = FixerAgent(domain=OntologyDomain.SOFTWARE)
+        task  = context or "주어진 오류를 해결하도록 코드를 수정하세요."
+        res   = await fixer.run(
+            task,
+            context={
+                "generated": code,
+                "review":    review_stub,
+                "iteration": 1,
+            },
+        )
+        if not res.success:
+            return {"fixed_code": None, "error": res.error or "fixer 실패"}
+        return {"fixed_code": str(res.output).strip(), "error": None}
 
     async def load_task(self, db: AsyncSession, task_id: str) -> CodeTask | None:
         return await db.scalar(select(CodeTask).where(CodeTask.id == task_id))

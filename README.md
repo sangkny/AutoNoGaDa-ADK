@@ -8,7 +8,7 @@
 
 ```bash
 cd projects
-docker compose -f docker-compose.dev.yml up -d autonaogada-api
+docker compose -f docker-compose.dev.yml up -d autonogada-api
 curl http://localhost:8002/health
 curl http://localhost:8002/docs
 ```
@@ -26,7 +26,9 @@ curl http://localhost:8002/docs
 
 ## 데이터베이스
 
-개발 편의상 **MEDI-IOT와 동일 PostgreSQL(`mediiot`)** 에 `software_*` 테이블을 생성합니다 (`create_all`).
+개발 편의상 **MEDI-IOT와 동일 PostgreSQL(`mediiot`)** 에 `software_*` 테이블을 둡니다. 스키마는 **`alembic upgrade head`** (버전 테이블: `alembic_version_autonogada`)로 관리합니다.
+
+이전 버전 테이블 `alembic_version_autonaogada` 를 쓰던 DB는 Postgres에서 `ALTER TABLE ... RENAME TO alembic_version_autonogada` 로 맞춘 뒤 `alembic upgrade head` 하세요.
 
 운영 시 전용 DB/스키마 분리 권장.
 

@@ -1,9 +1,14 @@
-"""에이전트 파이프라인 실행."""
+"""에이전트 파이프라인 — 생성 · 리뷰 · 수정 · 실행."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from schemas.software import (
+    PipelineFixRequest,
+    PipelineFixResponse,
+    PipelineGenerateRequest,
+    PipelineReviewRequest,
+    PipelineReviewResponse,
     PipelineRunRequest,
     PipelineRunInlineRequest,
     PipelineRunResponse,
@@ -13,6 +18,61 @@ from services.pipeline_runner import PipelineRunner
 router = APIRouter()
 _runner = PipelineRunner()
 
+
+# ── WEEK4 4-3-2: generate / review / fix ───────────────────────────
+
+@router.post(
+    "/generate",
+    response_model=PipelineRunResponse,
+    summary="코드 생성 (PIPELINE + SOFTWARE Ontology)",
+)
+async def pipeline_generate(
+    req: PipelineGenerateRequest,
+    db:  AsyncSession = Depends(get_db),
+) -> PipelineRunResponse:
+    try:
+        out = await _runner.generate(db, req.task, req.language)
+        return PipelineRunResponse(**out)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)[:500],
+        ) from e
+
+
+@router.post(
+    "/review",
+    response_model=PipelineReviewResponse,
+    summary="코드 리뷰 (ReviewerAgent HEAVY)",
+)
+async def pipeline_review(req: PipelineReviewRequest) -> PipelineReviewResponse:
+    try:
+        out = await _runner.review_code(req.code, req.language, req.context)
+        return PipelineReviewResponse(**out)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)[:500],
+        ) from e
+
+
+@router.post(
+    "/fix",
+    response_model=PipelineFixResponse,
+    summary="코드 자동 수정 (FixerAgent)",
+)
+async def pipeline_fix(req: PipelineFixRequest) -> PipelineFixResponse:
+    try:
+        out = await _runner.fix_code(req.code, req.error_message, req.context)
+        return PipelineFixResponse(**out)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)[:500],
+        ) from e
+
+
+# ── 기존 실행 경로 ─────────────────────────────────────────────────
 
 @router.post(
     "/run",

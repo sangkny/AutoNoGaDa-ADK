@@ -1,5 +1,8 @@
 """Pydantic 스키마 — 코드 작업·파이프라인."""
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,3 +46,36 @@ class PipelineRunResponse(BaseModel):
     ontology_passed: bool | None = None
     iterations: int = 0
     summary: str = ""
+    quality_report: dict[str, Any] | None = None
+
+
+class PipelineGenerateRequest(BaseModel):
+    """POST /pipeline/generate (WEEK4_PROMPTS 4-3-2)."""
+
+    task: str = Field(description="생성할 함수/코드에 대한 자연어 설명")
+    language: str = Field(default="python", max_length=32)
+
+
+class PipelineReviewRequest(BaseModel):
+    code: str = Field(min_length=1, description="리뷰할 소스 코드")
+    language: str = Field(default="python")
+    context: str | None = Field(default=None, description="추가 리뷰 맥락")
+
+
+class PipelineReviewResponse(BaseModel):
+    passed: bool
+    feedback: str = ""
+    llm_review: str = ""
+    ontology_passed: bool | None = None
+    ontology_summary: str = ""
+
+
+class PipelineFixRequest(BaseModel):
+    code: str = Field(min_length=1)
+    error_message: str = Field(min_length=1, description="오류 메시지 또는 수정 지시")
+    context: str | None = Field(default=None)
+
+
+class PipelineFixResponse(BaseModel):
+    fixed_code: str | None = None
+    error: str | None = None

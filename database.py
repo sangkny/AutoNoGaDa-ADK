@@ -32,10 +32,19 @@ class Base(DeclarativeBase):
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
 async def create_tables() -> None:
+    """
+    DEPRECATED: Alembic 마이그레이션 사용 (`alembic upgrade head`).
+    레거시/로컬 스크립트에서만 호출.
+    """
     import models.software  # noqa: F401
 
     async with engine.begin() as conn:

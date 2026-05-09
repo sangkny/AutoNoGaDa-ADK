@@ -30,7 +30,12 @@ class CodeTask(Base):
     language: Mapped[str] = mapped_column(String(32), default="python")
 
     status: Mapped[TaskStatusEnum] = mapped_column(
-        SAEnum(TaskStatusEnum), default=TaskStatusEnum.PENDING,
+        SAEnum(
+            TaskStatusEnum,
+            name="softwaretaskstatus",
+            values_callable=lambda x: [i.value for i in x],
+        ),
+        default=TaskStatusEnum.PENDING,
     )
     output_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     ontology_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
