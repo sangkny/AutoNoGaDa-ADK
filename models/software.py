@@ -94,3 +94,36 @@ class TaskFix(Base):
     )
 
     task: Mapped["CodeTask"] = relationship(back_populates="fixes")
+
+
+class SoftwareLoreDecision(Base):
+    """
+    Lore / 감사추적 — DEBATE 등 에이전트 전략으로 내린 결정을 PostgreSQL 에 보관.
+    (Week 5 프롬프트 5-1-2)
+    """
+
+    __tablename__ = "software_lore_decisions"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
+    )
+    decision_type: Mapped[str] = mapped_column(
+        String(64), default="architecture_debate", nullable=False,
+    )
+    requirement: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    orchestrator_passed: Mapped[bool] = mapped_column(default=False)
+    strategy: Mapped[str] = mapped_column(String(32), default="debate")
+    domain: Mapped[str] = mapped_column(String(32), default="software")
+
+    orchestrator_task_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True,
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lore_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+    )

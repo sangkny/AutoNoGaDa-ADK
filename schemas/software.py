@@ -47,6 +47,10 @@ class PipelineRunResponse(BaseModel):
     iterations: int = 0
     summary: str = ""
     quality_report: dict[str, Any] | None = None
+    git: dict[str, Any] | None = Field(
+        default=None,
+        description="auto_commit 시 커밋 메타·PR 초안 (Week 5)",
+    )
 
 
 class PipelineGenerateRequest(BaseModel):
@@ -79,3 +83,26 @@ class PipelineFixRequest(BaseModel):
 class PipelineFixResponse(BaseModel):
     fixed_code: str | None = None
     error: str | None = None
+
+
+class ArchitectureDecideRequest(BaseModel):
+    """POST /architecture/decide — DEBATE 로 아키텍처 선택."""
+
+    requirement: str = Field(
+        min_length=3,
+        max_length=12_000,
+        description="트레이드오프·요구 설명",
+    )
+
+
+class ArchitectureDecideResponse(BaseModel):
+    decision_id: str
+    orchestrator_task_id: str
+    orchestrator_passed: bool
+    recommendation: str
+    rationale: str = ""
+    strategy: str = "debate"
+    domain: str = "software"
+    debate_note: str = ""
+    error: str | None = None
+    lore_preview: list[dict[str, Any]] = Field(default_factory=list)

@@ -1,5 +1,5 @@
 """에이전트 파이프라인 — 생성 · 리뷰 · 수정 · 실행."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -29,9 +29,15 @@ _runner = PipelineRunner()
 async def pipeline_generate(
     req: PipelineGenerateRequest,
     db:  AsyncSession = Depends(get_db),
+    auto_commit: bool = Query(
+        False,
+        description="True 이면 생성 코드를 generated/snippets 에 쓰고 git commit",
+    ),
 ) -> PipelineRunResponse:
     try:
-        out = await _runner.generate(db, req.task, req.language)
+        out = await _runner.generate(
+            db, req.task, req.language, auto_commit=auto_commit,
+        )
         return PipelineRunResponse(**out)
     except Exception as e:
         raise HTTPException(

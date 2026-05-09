@@ -13,8 +13,10 @@ from agents.orchestrator import Orchestrator, OrchestraStrategy
 from agents.reviewer import ReviewResult, ReviewerAgent
 from ontology.base import OntologyDomain, ValidationError
 
+from config import get_settings
 from models.software import CodeTask, TaskReview, TaskStatusEnum
 from services.code_analyzer import CodeAnalyzer
+from services.git_service import GitOperationError, GitService, commit_result_as_dict
 
 log = logging.getLogger("services.pipeline_runner")
 
@@ -135,11 +137,62 @@ class PipelineRunner:
         db: AsyncSession,
         task: str,
         language: str = "python",
+        *,
+        auto_commit: bool = False,
     ) -> dict[str, Any]:
         """
         POST /pipeline/generate — 함수 설명 기반 코드 생성 + 품질 리포트.
+
+        ``auto_commit`` 이 True 이면 생성 코드를 저장소 내 ``generated/snippets/`` 에
+        쓴 뒤 `git add` + `git commit` 한다 (Week 5 5-1-1).
         """
-        return await self.run_inline(db, task, language)
+        payload = await self.run_inline(db, task, language)
+        if (
+            auto_commit and payload.get("output_code") and payload.get("status") != "failed"
+        ):
+            await self._try_git_commit_after_generate(
+                payload,
+                natural_task=task,
+                language=language,
+            )
+        return payload
+
+    async def _try_git_commit_after_generate(
+        self,
+        payload: dict[str, Any],
+        natural_task: str,
+        language: str,
+    ) -> None:
+        settings = get_settings()
+        svc    = GitService(settings)
+        repo   = settings.git_repo_path
+        tid    = str(payload.get("task_id", "unknown"))
+        code   = str(payload.get("output_code") or "")
+        try:
+            rel = await svc.write_generated_snippet(repo, tid, code, language)
+            msg = (
+                f"feat(autonogada): codegen task={tid[:8]} — "
+                f"{natural_task[:72]}"
+            )
+            res = await svc.commit(repo, msg, [rel])
+            git_info = commit_result_as_dict(res)
+            git_info["path"] = rel
+            git_info["pr_description"] = GitService.create_pr_description(
+                [
+                    {
+                        "path":   rel,
+                        "status": "generated",
+                        "summary": natural_task[:120],
+                    },
+                ],
+            )
+            payload["git"] = git_info
+        except GitOperationError as e:
+            log.warning("auto_commit 실패: %s", e)
+            payload["git"] = {"committed": False, "error": str(e)}
+        except OSError as e:
+            log.warning("snippet 쓰기 실패: %s", e)
+            payload["git"] = {"committed": False, "error": str(e)}
 
     async def review_code(
         self,
