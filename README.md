@@ -35,7 +35,7 @@ curl http://localhost:8002/docs
 `x-llm-env` / `x-db-env` 는 `docker-compose.dev.yml` 에서 MEDI-IOT 와 동일하게 주입됩니다  
 (`LOCAL_BASE_URL` → host.docker.internal LM Studio).
 
-## Git 원격 (Submodule)
+## Git
 
-상위 `projects` 레포에서는 본 디렉터리를 Git submodule 로 등록합니다.  
-원격 저장소: `https://github.com/sangkny/AutoNoGaDa-ADK`
+- 독립 저장소: `git@github.com:sangkny/AutoNoGaDa-ADK.git` (브랜치 `main`, 초기 커밋 `c074b36` 기준 동기화됨)
+- 상위 `projects` 레포에도 동일 소스 디렉터리가 포함되어 있습니다(`docker-compose` 빌드 컨텍스트). Git submodule 전환은 선택 사항입니다.
