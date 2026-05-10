@@ -57,6 +57,12 @@ class Settings(BaseSettings):
         description="http://code-sandbox:8010 형식 — 비우면 TS/Rust는 sandbox 없이 패스 불가 처리",
     )
 
+    monthly_budget_usd: float = Field(
+        default=10_000.0,
+        validation_alias=AliasChoices("MONTHLY_BUDGET_USD", "monthly_budget_usd"),
+        description="Cost 요약·경고용 월간 예산(USD)",
+    )
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() in ("dev", "development", "local")

@@ -6,6 +6,13 @@ from .software import (
     TaskStatusEnum,
 )
 from .svg_generation import SvgGeneration
+from .adk_kb import (
+    AdkCodeExecution,
+    AdkFailurePattern,
+    EMBED_DIM,
+    ModelUsageLog,
+    MonthlyBudget,
+)
 
 __all__ = [
     "CodeTask",
@@ -14,4 +21,9 @@ __all__ = [
     "TaskFix",
     "TaskStatusEnum",
     "SvgGeneration",
+    "AdkCodeExecution",
+    "AdkFailurePattern",
+    "EMBED_DIM",
+    "ModelUsageLog",
+    "MonthlyBudget",
 ]

@@ -18,6 +18,7 @@ for _extra in (_ROOT / "shared-libraries", _ROOT.parent / "shared-libraries"):
 from database import Base  # noqa: E402
 import models.software  # noqa: F401, E402
 import models.svg_generation  # noqa: F401, E402
+import models.adk_kb  # noqa: F401, E402
 
 config = context.config
 if config.config_file_name is not None:

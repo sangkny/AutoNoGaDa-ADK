@@ -18,9 +18,16 @@ from events import EVENT_CODE_GENERATED, publish_platform_event
 from config import get_settings
 from models.software import CodeTask, TaskReview, TaskStatusEnum
 from services.code_analyzer import CodeAnalyzer
+from services.cost_optimizer import CostOptimizerService
 from services.git_service import GitOperationError, GitService, commit_result_as_dict
+from services.knowledge_agent import KnowledgeAgent
 from services.pipeline_monitor import get_pipeline_monitor
-from services.polyglot_executor import PolyglotExecutor, SUPPORTED_LANGUAGES, normalize_language
+from services.polyglot_executor import (
+    PolyglotExecutor,
+    SUPPORTED_LANGUAGES,
+    extract_fenced_code,
+    normalize_language,
+)
 
 log = logging.getLogger("services.pipeline_runner")
 
@@ -68,16 +75,48 @@ class PipelineRunner:
                 f"(허용: {', '.join(sorted(SUPPORTED_LANGUAGES))})",
             )
 
+        cost_svc = CostOptimizerService()
+        cost_sel = await cost_svc.select_model(task.description)
+        strategy = (
+            OrchestraStrategy.CONSENSUS
+            if cost_sel.complexity == "critical"
+            else OrchestraStrategy.PIPELINE
+        )
+        max_iter = 3 if cost_sel.complexity == "critical" else 2
+
         orch = Orchestrator(
             domain=OntologyDomain.SOFTWARE,
-            strategy=OrchestraStrategy("pipeline"),
-            max_iterations=2,
+            strategy=strategy,
+            max_iterations=max_iter,
         )
         settings = get_settings()
         pe = PolyglotExecutor(settings.code_sandbox_url or None)
         prompt_base = pe.build_pipeline_user_prompt(task.description, task.language)
+
+        rag_txt = ""
+        try:
+            rag_txt = await KnowledgeAgent().build_rag_context(db, task.description)
+        except Exception:
+            log.debug("지식베이스 RAG 미적용", exc_info=True)
+
         addon = pe.build_system_addon(task.language, framework)
-        prompt = f"{prompt_base}\n\n[생성 규칙]\n{addon}" if addon else prompt_base
+
+        routing_note = ""
+        if cost_sel.complexity in {"complex", "critical"}:
+            routing_note = (
+                f"\n[COST 라우팅] complexity={cost_sel.complexity} · "
+                f"suggested_model={cost_sel.selected_model}"
+            )
+
+        preamble = ""
+        if rag_txt:
+            preamble += f"[유사 구현 참고]\n{rag_txt}\n\n"
+
+        prompt_base = preamble + prompt_base + routing_note
+        prompt = (
+            f"{prompt_base}\n\n[생성 규칙]\n{addon}"
+            if addon else prompt_base
+        )
 
         mon = get_pipeline_monitor()
         t0 = time.perf_counter()
@@ -131,7 +170,7 @@ class PipelineRunner:
                 {"_progress_hint": 90},
             )
 
-            code_clean = pe.extract_fenced_code(output, norm)
+            code_clean = extract_fenced_code(output, norm)
             syntax_note = ""
             if norm == "python":
                 vr = await self._analyzer.validate_snippet(code_clean, "python")
@@ -165,6 +204,48 @@ class PipelineRunner:
             await db.flush()
 
             quality_report = self._quality_report(vr, orch_passed)
+
+            tok_est = len(code_clean or "") // 4 + len(task.description) // 4
+            try:
+                await cost_svc.record_usage(
+                    db,
+                    task_id=task.id,
+                    selection=cost_sel,
+                    actual_tokens=min(max(tok_est, cost_sel.estimated_tokens), 100_000),
+                )
+            except Exception:
+                log.debug("모델 사용 로그 저장 스킵", exc_info=True)
+
+            try:
+                ok_run = orch_passed and on_pass
+                await KnowledgeAgent().index_execution(
+                    db,
+                    task_id=task.id,
+                    task=task.description,
+                    result=code_clean or "",
+                    language=task.language,
+                    latency_ms=lat_ms,
+                    success=ok_run,
+                    ontology_passed=on_pass,
+                    error_message=(
+                        (
+                            fb[:900]
+                            if fb
+                            else (
+                                "orchestrator_fail"
+                                if not orch_passed
+                                else "ontology_fail"
+                            )
+                        )
+                        if not ok_run
+                        else None
+                    ),
+                )
+            except Exception:
+                log.warning(
+                    "Knowledge 인덱스 실패 — 무시하고 진행 (임베딩/온톨로지 확인)",
+                    exc_info=True,
+                )
 
             log.info(
                 "pipeline 완료 task=%s orch_pass=%s onto=%s",
