@@ -11,10 +11,18 @@ from agents.orchestrator import OrchestratorResult, OrchestraStrategy
 from agents.reviewer import ReviewResult
 from ontology.base import OntologyDomain
 
-
 ADD_SNIPPET = """def add(a, b):
     return a + b
 """
+
+
+async def _dev_headers(client: AsyncClient) -> dict[str, str]:
+    r = await client.post(
+        "/api/v1/auth/token",
+        data={"username": "developer", "password": "dev123"},
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
 @pytest.mark.asyncio
@@ -39,6 +47,7 @@ async def test_pipeline_generate_add_mocked(client: AsyncClient) -> None:
                 "task": "두 정수 a,b를 더하는 add(a, b) 함수를 작성하세요.",
                 "language": "python",
             },
+            headers=await _dev_headers(client),
         )
     assert r.status_code == 200, r.text
     body = r.json()

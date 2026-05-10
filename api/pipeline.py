@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.dependencies import require_role
 from database import get_db
 from schemas.software import (
     PipelineFixRequest,
@@ -33,6 +34,7 @@ async def pipeline_generate(
         False,
         description="True 이면 생성 코드를 generated/snippets 에 쓰고 git commit",
     ),
+    _: dict = Depends(require_role("developer", "admin")),
 ) -> PipelineRunResponse:
     try:
         out = await _runner.generate(
