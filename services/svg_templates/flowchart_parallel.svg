@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" width="520" height="220">
+  <rect fill="#f8fafc" width="520" height="220" stroke="#64748b"/>
+  <text x="20" y="32" font-family="sans-serif" font-size="15" fill="#0f172a">{title}</text>
+  <rect x="200" y="52" rx="8" ry="8" width="120" height="40" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="260" y="78" font-family="sans-serif" font-size="12" text-anchor="middle">{start_step}</text>
+  <path d="M 260 92 V 110" stroke="#334155" stroke-width="2" marker-end="url(#far)"/>
+  <rect x="60" y="118" rx="8" ry="8" width="140" height="44" fill="#e0f2fe" stroke="#0369a1"/>
+  <text x="130" y="146" font-family="sans-serif" font-size="12" text-anchor="middle">{branch_a}</text>
+  <rect x="320" y="118" rx="8" ry="8" width="140" height="44" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="390" y="146" font-family="sans-serif" font-size="12" text-anchor="middle">{branch_b}</text>
+  <path d="M 228 118 L 200 118 L 200 74 H 248" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#far)"/>
+  <path d="M 292 118 L 320 118" stroke="#334155" stroke-width="2" marker-end="url(#far)"/>
+  <path d="M 130 162 V 180 H 390 V 162" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#far)"/>
+  <rect x="200" y="186" rx="8" ry="8" width="120" height="28" fill="#fef3c7" stroke="#d97706"/>
+  <text x="260" y="205" font-family="sans-serif" font-size="11" text-anchor="middle">{join_label}</text>
+  <defs>
+    <marker id="far" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L8,4 z" fill="#334155"/>
+    </marker>
+  </defs>
+</svg>

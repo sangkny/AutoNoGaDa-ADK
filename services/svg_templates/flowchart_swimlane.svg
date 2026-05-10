@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 260" width="600" height="260">
+  <rect fill="#ffffff" width="600" height="260" stroke="#94a3b8"/>
+  <text x="20" y="28" font-family="sans-serif" font-size="15" fill="#0f172a">{title}</text>
+  <line x1="20" y1="44" x2="580" y2="44" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="20" y="48" width="120" height="72" fill="#f1f5f9" stroke="#64748b"/>
+  <text x="80" y="88" font-family="sans-serif" font-size="12" text-anchor="middle">{lane_a}</text>
+  <rect x="20" y="124" width="120" height="72" fill="#ecfdf5" stroke="#059669"/>
+  <text x="80" y="164" font-family="sans-serif" font-size="12" text-anchor="middle">{lane_b}</text>
+  <rect x="20" y="200" width="120" height="52" fill="#fffbeb" stroke="#d97706"/>
+  <text x="80" y="228" font-family="sans-serif" font-size="12" text-anchor="middle">{lane_c}</text>
+  <rect x="180" y="64" rx="6" ry="6" width="100" height="36" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="230" y="87" font-family="sans-serif" font-size="11" text-anchor="middle">{step_1}</text>
+  <rect x="340" y="138" rx="6" ry="6" width="100" height="36" fill="#bae6fd" stroke="#0284c7"/>
+  <text x="390" y="161" font-family="sans-serif" font-size="11" text-anchor="middle">{step_2}</text>
+  <rect x="480" y="210" rx="6" ry="6" width="90" height="32" fill="#ddd6fe" stroke="#6d28d9"/>
+  <text x="525" y="230" font-family="sans-serif" font-size="10" text-anchor="middle">{step_3}</text>
+  <path d="M 280 82 H 320 V 156 H 338" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#sar)"/>
+  <path d="M 440 156 H 478 V 226 H 478" stroke="#334155" stroke-width="2" fill="none" marker-end="url(#sar)"/>
+  <defs>
+    <marker id="sar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L8,4 z" fill="#334155"/>
+    </marker>
+  </defs>
+</svg>

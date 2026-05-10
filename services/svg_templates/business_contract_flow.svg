@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" width="520" height="220">
+  <rect fill="#fffbeb" width="520" height="220" stroke="#d97706"/>
+  <text x="22" y="32" font-family="sans-serif" font-size="15" fill="#78350f">{title}</text>
+  <rect x="40" y="56" width="100" height="40" rx="6" fill="#ffedd5" stroke="#ea580c"/>
+  <text x="90" y="82" font-family="sans-serif" font-size="11" text-anchor="middle">{draft}</text>
+  <rect x="180" y="56" width="100" height="40" rx="6" fill="#fef3c7" stroke="#ca8a04"/>
+  <text x="230" y="82" font-family="sans-serif" font-size="11" text-anchor="middle">{review}</text>
+  <rect x="320" y="56" width="100" height="40" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="370" y="82" font-family="sans-serif" font-size="11" text-anchor="middle">{sign}</text>
+  <rect x="440" y="56" width="60" height="40" rx="6" fill="#dbeafe" stroke="#2563eb"/>
+  <text x="470" y="82" font-family="sans-serif" font-size="10" text-anchor="middle">{archive}</text>
+  <path d="M 140 76 H 176" stroke="#44403c" stroke-width="2" marker-end="url(#bcf)"/>
+  <path d="M 280 76 H 316" stroke="#44403c" stroke-width="2" marker-end="url(#bcf)"/>
+  <path d="M 420 76 H 436" stroke="#44403c" stroke-width="2" marker-end="url(#bcf)"/>
+  <rect x="60" y="130" width="400" height="56" rx="8" fill="#ffffff" stroke="#fcd34d"/>
+  <text x="260" y="164" font-family="sans-serif" font-size="12" text-anchor="middle">{clause_focus}</text>
+  <defs>
+    <marker id="bcf" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L8,4 z" fill="#44403c"/>
+    </marker>
+  </defs>
+</svg>

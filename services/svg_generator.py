@@ -31,27 +31,40 @@ SVG_TYPES: tuple[str, ...] = (
     "business_process",
 )
 
-# 기본 템플릿 매핑 + style.variant 로 교체 가능
+# 기본 템플릿 매핑 + style.variant / style.template 로 교체 가능
 _DEFAULT_TEMPLATE: dict[str, str] = {
     "flowchart": "flowchart_basic.svg",
     "architecture": "architecture_3tier.svg",
-    "sequence": "sequence_basic.svg",
-    "er_diagram": "flowchart_decision.svg",
+    "sequence": "sequence_api_call.svg",
+    "er_diagram": "er_diagram_basic.svg",
     "medical_report": "medical_eye_report.svg",
     "business_process": "business_approval.svg",
 }
 
 _TEMPLATES_ROOT = Path(__file__).resolve().parent / "svg_templates"
 
-# 문서화용: 7개 물리 템플릿 파일
+# 물리 템플릿 파일 (API /for_svg 회귀 테스트 대상) — Phase 2 W2: 20개
 TEMPLATE_FILES: tuple[str, ...] = (
     "flowchart_basic.svg",
     "flowchart_decision.svg",
+    "flowchart_parallel.svg",
+    "flowchart_loop.svg",
+    "flowchart_swimlane.svg",
+    "flowchart_data_flow.svg",
     "architecture_3tier.svg",
     "architecture_microservice.svg",
-    "sequence_basic.svg",
+    "architecture_event_driven.svg",
+    "architecture_serverless.svg",
+    "architecture_ai_pipeline.svg",
     "medical_eye_report.svg",
+    "medical_diagnosis_flow.svg",
     "business_approval.svg",
+    "business_contract_flow.svg",
+    "business_kpi_dashboard.svg",
+    "sequence_api_call.svg",
+    "sequence_auth_flow.svg",
+    "er_diagram_basic.svg",
+    "er_diagram_medical.svg",
 )
 
 
@@ -83,6 +96,10 @@ class SVGGeneratorService:
 
     def _template_path(self, svg_type: str, style: dict[str, Any] | None) -> Path:
         style = style or {}
+        tpl = style.get("template")
+        if isinstance(tpl, str) and tpl.endswith(".svg") and tpl in TEMPLATE_FILES:
+            return _TEMPLATES_ROOT / tpl
+
         name = _DEFAULT_TEMPLATE.get(svg_type, "flowchart_basic.svg")
         if svg_type == "architecture" and style.get("variant") == "microservice":
             name = "architecture_microservice.svg"

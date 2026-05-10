@@ -87,8 +87,9 @@ class TestSVGValidation:
 
 
 class TestSVGTemplateFiles:
-    def test_seven_template_files_exist(self) -> None:
+    def test_twenty_template_files_exist(self) -> None:
         svc = SVGGeneratorService()
+        assert len(TEMPLATE_FILES) == 20
         for name in TEMPLATE_FILES:
             p = svc._template_path("flowchart", None).parent / name
             assert p.is_file(), name
