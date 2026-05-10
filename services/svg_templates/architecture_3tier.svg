@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 280" width="560" height="280">
+  <rect fill="#f1f5f9" width="560" height="280" stroke="#475569"/>
+  <text x="24" y="36" font-family="sans-serif" font-size="16" fill="#0f172a">{title}</text>
+  <rect x="40" y="60" width="480" height="56" rx="6" fill="#eff6ff" stroke="#1d4ed8"/>
+  <text x="280" y="94" font-family="sans-serif" font-size="13" text-anchor="middle">Presentation / API Gateway</text>
+  <rect x="40" y="132" width="480" height="56" rx="6" fill="#ecfdf5" stroke="#059669"/>
+  <text x="280" y="166" font-family="sans-serif" font-size="13" text-anchor="middle">Application / Domain Services</text>
+  <rect x="40" y="204" width="480" height="56" rx="6" fill="#fffbeb" stroke="#d97706"/>
+  <text x="280" y="238" font-family="sans-serif" font-size="13" text-anchor="middle">Data / Persistence</text>
+  <path d="M 280 116 V 132" stroke="#334155" stroke-width="2" marker-end="url(#adarrow)"/>
+  <path d="M 280 188 V 204" stroke="#334155" stroke-width="2" marker-end="url(#adarrow)"/>
+  <defs>
+    <marker id="adarrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L8,4 z" fill="#334155"/>
+    </marker>
+  </defs>
+</svg>

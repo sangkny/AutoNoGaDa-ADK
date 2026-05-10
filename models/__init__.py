@@ -5,6 +5,7 @@ from .software import (
     TaskReview,
     TaskStatusEnum,
 )
+from .svg_generation import SvgGeneration
 
 __all__ = [
     "CodeTask",
@@ -12,4 +13,5 @@ __all__ = [
     "TaskReview",
     "TaskFix",
     "TaskStatusEnum",
+    "SvgGeneration",
 ]
