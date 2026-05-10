@@ -13,6 +13,7 @@ from agents.orchestrator import Orchestrator, OrchestraStrategy
 from agents.reviewer import ReviewResult, ReviewerAgent
 from ontology.base import OntologyDomain, ValidationError
 
+from events import EVENT_CODE_GENERATED, publish_platform_event
 from config import get_settings
 from models.software import CodeTask, TaskReview, TaskStatusEnum
 from services.code_analyzer import CodeAnalyzer
@@ -95,6 +96,22 @@ class PipelineRunner:
                 orch_passed,
                 on_pass,
             )
+            redis_url = (get_settings().redis_url or "").strip()
+            if redis_url:
+                try:
+                    await publish_platform_event(
+                        redis_url,
+                        EVENT_CODE_GENERATED,
+                        {
+                            "task_id":         task.id,
+                            "language":        task.language,
+                            "ontology_passed": on_pass,
+                            "quality_report":  quality_report,
+                        },
+                    )
+                except Exception as e:
+                    log.warning("Redis 이벤트 code.generated 발행 스킵: %s", e)
+
             return {
                 "task_id":           task.id,
                 "status":            task.status.value,
