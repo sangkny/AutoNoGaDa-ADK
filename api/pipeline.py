@@ -8,13 +8,22 @@ from schemas.software import (
     PipelineFixRequest,
     PipelineFixResponse,
     PipelineGenerateRequest,
+    PipelineLanguagesResponse,
     PipelineReviewRequest,
     PipelineReviewResponse,
     PipelineRunRequest,
     PipelineRunInlineRequest,
     PipelineRunResponse,
+    PipelineValidateRequest,
+    PipelineValidateResponse,
 )
 from services.pipeline_runner import PipelineRunner
+from services.polyglot_executor import (
+    PolyglotExecutor,
+    SUPPORTED_LANGUAGES,
+    list_supported_languages,
+    normalize_language,
+)
 
 router = APIRouter()
 _runner = PipelineRunner()
@@ -38,14 +47,68 @@ async def pipeline_generate(
 ) -> PipelineRunResponse:
     try:
         out = await _runner.generate(
-            db, req.task, req.language, auto_commit=auto_commit,
+            db,
+            req.task,
+            req.language,
+            auto_commit=auto_commit,
+            framework=req.framework,
         )
         return PipelineRunResponse(**out)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)[:500],
         ) from e
+
+
+@router.get(
+    "/languages",
+    response_model=PipelineLanguagesResponse,
+    summary="지원 언어·프레임워크·예시",
+)
+async def pipeline_languages() -> PipelineLanguagesResponse:
+    d = list_supported_languages()
+    return PipelineLanguagesResponse(**d)
+
+
+@router.post(
+    "/validate",
+    response_model=PipelineValidateResponse,
+    summary="폴리glot 문법 검증 + POLYGLOT Ontology(선택)",
+)
+async def pipeline_validate(req: PipelineValidateRequest) -> PipelineValidateResponse:
+    from config import get_settings
+
+    settings = get_settings()
+    pe = PolyglotExecutor(settings.code_sandbox_url or None)
+    norm = normalize_language(req.language)
+    if norm not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported language: {req.language}",
+        )
+    syn = await pe.validate_syntax(req.code, norm)
+    ont_pass: bool | None = None
+    ont_sum = ""
+    if req.ontology:
+        ov = await pe.validate_polyglot_ontology(req.code, norm)
+        ont_pass = bool(ov.passed)
+        ont_sum = ov.summary
+    valid = syn.valid and (ont_pass is not False)
+    if req.ontology and ont_pass is False:
+        valid = False
+    return PipelineValidateResponse(
+        valid=valid,
+        syntax_errors=syn.syntax_errors,
+        style_warnings=syn.style_warnings,
+        ontology_passed=ont_pass,
+        ontology_summary=ont_sum,
+    )
 
 
 @router.post(
@@ -100,6 +163,11 @@ async def run_pipeline(
     try:
         out = await _runner.run_task(db, task)
         return PipelineRunResponse(**out)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -117,8 +185,18 @@ async def run_inline(
     db: AsyncSession = Depends(get_db),
 ) -> PipelineRunResponse:
     try:
-        out = await _runner.run_inline(db, req.description, req.language)
+        out = await _runner.run_inline(
+            db,
+            req.description,
+            req.language,
+            framework=req.framework,
+        )
         return PipelineRunResponse(**out)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

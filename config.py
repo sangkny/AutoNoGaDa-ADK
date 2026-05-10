@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     )
     git_default_remote: str = Field(default="origin")
 
+    # Phase 2 W4 — 폴리glot 구문 검증 (TypeScript/Rust 등)
+    code_sandbox_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "CODE_SANDBOX_URL",
+            "code_sandbox_url",
+        ),
+        description="http://code-sandbox:8010 형식 — 비우면 TS/Rust는 sandbox 없이 패스 불가 처리",
+    )
+
     @property
     def is_development(self) -> bool:
         return self.environment.lower() in ("dev", "development", "local")

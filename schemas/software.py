@@ -37,6 +37,7 @@ class PipelineRunInlineRequest(BaseModel):
 
     description: str
     language: str = Field(default="python")
+    framework: str | None = Field(default=None, max_length=48)
 
 
 class PipelineRunResponse(BaseModel):
@@ -58,6 +59,32 @@ class PipelineGenerateRequest(BaseModel):
 
     task: str = Field(description="생성할 함수/코드에 대한 자연어 설명")
     language: str = Field(default="python", max_length=32)
+    framework: str | None = Field(default=None, max_length=48, description="fastapi·express·axum 등")
+
+
+class PipelineValidateRequest(BaseModel):
+    """POST /pipeline/validate — 폴리glot 문법(+POLYGLOT Ontology 선택)."""
+
+    code: str = Field(min_length=1, description="소스 문자열")
+    language: str = Field(default="python", max_length=32)
+    ontology: bool = Field(
+        default=True,
+        description="True면 POLYGLOT OntologyValidator 함께 실행",
+    )
+
+
+class PipelineValidateResponse(BaseModel):
+    valid: bool
+    syntax_errors: list[str]
+    style_warnings: list[str] = Field(default_factory=list)
+    ontology_passed: bool | None = None
+    ontology_summary: str = ""
+
+
+class PipelineLanguagesResponse(BaseModel):
+    languages: list[str]
+    catalog: list[dict[str, Any]]
+    sandbox_required: list[str]
 
 
 class PipelineReviewRequest(BaseModel):

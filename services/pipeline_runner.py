@@ -20,6 +20,7 @@ from models.software import CodeTask, TaskReview, TaskStatusEnum
 from services.code_analyzer import CodeAnalyzer
 from services.git_service import GitOperationError, GitService, commit_result_as_dict
 from services.pipeline_monitor import get_pipeline_monitor
+from services.polyglot_executor import PolyglotExecutor, SUPPORTED_LANGUAGES, normalize_language
 
 log = logging.getLogger("services.pipeline_runner")
 
@@ -35,6 +36,8 @@ class PipelineRunner:
         db: AsyncSession,
         description: str,
         language: str = "python",
+        *,
+        framework: str | None = None,
     ) -> dict[str, Any]:
         """임시 CodeTask 를 만들고 PIPELINE 실행."""
         task = CodeTask(
@@ -46,22 +49,35 @@ class PipelineRunner:
         )
         db.add(task)
         await db.flush()
-        return await self.run_task(db, task)
+        return await self.run_task(db, task, framework=framework)
 
-    async def run_task(self, db: AsyncSession, task: CodeTask) -> dict[str, Any]:
+    async def run_task(
+        self,
+        db: AsyncSession,
+        task: CodeTask,
+        *,
+        framework: str | None = None,
+    ) -> dict[str, Any]:
         task.status = TaskStatusEnum.RUNNING
         await db.flush()
+
+        norm = normalize_language(task.language)
+        if norm not in SUPPORTED_LANGUAGES:
+            raise ValueError(
+                f"지원하지 않는 language 입니다: {task.language!r} "
+                f"(허용: {', '.join(sorted(SUPPORTED_LANGUAGES))})",
+            )
 
         orch = Orchestrator(
             domain=OntologyDomain.SOFTWARE,
             strategy=OrchestraStrategy("pipeline"),
             max_iterations=2,
         )
-        prompt = (
-            f"{task.language} 로 다음 요구를 만족하는 **함수 하나**만 작성하세요. "
-            f"설명: {task.description}\n"
-            "코드만 출력하고 자연어 설명은 최소화하세요."
-        )
+        settings = get_settings()
+        pe = PolyglotExecutor(settings.code_sandbox_url or None)
+        prompt_base = pe.build_pipeline_user_prompt(task.description, task.language)
+        addon = pe.build_system_addon(task.language, framework)
+        prompt = f"{prompt_base}\n\n[생성 규칙]\n{addon}" if addon else prompt_base
 
         mon = get_pipeline_monitor()
         t0 = time.perf_counter()
@@ -115,16 +131,28 @@ class PipelineRunner:
                 {"_progress_hint": 90},
             )
 
-            vr = await self._analyzer.validate_snippet(output, task.language)
-            on_pass = bool(vr.passed)
+            code_clean = pe.extract_fenced_code(output, norm)
+            syntax_note = ""
+            if norm == "python":
+                vr = await self._analyzer.validate_snippet(code_clean, "python")
+                on_pass = bool(vr.passed)
+            else:
+                ont_vr = await pe.validate_polyglot_ontology(code_clean, norm)
+                syn = await pe.validate_syntax(code_clean, norm)
+                on_pass = bool(ont_vr.passed) and syn.valid
+                vr = ont_vr
+                if not syn.valid:
+                    syntax_note = "; ".join(syn.syntax_errors[:8])
 
-            task.output_code       = output[:16000] if output else None
+            task.output_code       = code_clean[:16000] if code_clean else None
             task.ontology_passed   = on_pass
             task.status            = TaskStatusEnum.COMPLETED
 
             fb = vr.summary
             if not vr.passed and vr.errors:
                 fb = "; ".join(f"{e.code}:{e.message}" for e in vr.errors[:6])[:4000]
+            if syntax_note:
+                fb = f"{fb} | syntax: {syntax_note}"[:4000]
 
             review = TaskReview(
                 id=str(uuid.uuid4()),
@@ -172,7 +200,7 @@ class PipelineRunner:
                 latency_ms=lat_ms,
                 iterations=iterations,
                 ontology_passed=on_pass,
-                rough_char_count=len(output or ""),
+                rough_char_count=len(code_clean or ""),
                 model_hint="local/e4b-pipeline",
             )
 
@@ -236,6 +264,7 @@ class PipelineRunner:
         language: str = "python",
         *,
         auto_commit: bool = False,
+        framework: str | None = None,
     ) -> dict[str, Any]:
         """
         POST /pipeline/generate — 함수 설명 기반 코드 생성 + 품질 리포트.
@@ -243,7 +272,7 @@ class PipelineRunner:
         ``auto_commit`` 이 True 이면 생성 코드를 저장소 내 ``generated/snippets/`` 에
         쓴 뒤 `git add` + `git commit` 한다 (Week 5 5-1-1).
         """
-        payload = await self.run_inline(db, task, language)
+        payload = await self.run_inline(db, task, language, framework=framework)
         if (
             auto_commit and payload.get("output_code") and payload.get("status") != "failed"
         ):
