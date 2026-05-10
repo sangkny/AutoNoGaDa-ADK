@@ -7,7 +7,7 @@ import pytest
 from httpx import AsyncClient
 from ontology.validator import OntologyValidator
 
-from services.svg_generator import TEMPLATE_FILES, SVGGeneratorService
+from services.svg_generator import TEMPLATE_FILES
 
 
 def _templates_dir() -> Path:
