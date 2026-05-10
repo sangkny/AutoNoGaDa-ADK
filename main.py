@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from api import api_router
 from config import get_settings
 from events import DEFAULT_EVENTS_CHANNEL, EventBus
+from observability.fastapi_install import install_observability
 from services.platform_event_handlers import autonogada_incoming_dispatch
 
 log = logging.getLogger("main")
@@ -63,6 +64,8 @@ app = FastAPI(
     version=settings.version,
     lifespan=lifespan,
 )
+
+install_observability(app, settings.service_name)
 
 app.include_router(api_router, prefix="/api/v1")
 
