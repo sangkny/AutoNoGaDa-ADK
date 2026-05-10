@@ -66,6 +66,26 @@ class TestSVGGenerator:
         assert vr.passed is True
 
 
+class TestSVGValidation:
+    """무효/경계 SVG — 구조 검사 및 API validate."""
+
+    @pytest.mark.asyncio
+    async def test_structural_invalid_xml(self) -> None:
+        svc = SVGGeneratorService()
+        ok, errs = svc.structural_check("not xml at all")
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_validate_endpoint_xss(self, client: AsyncClient) -> None:
+        bad = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><script>x</script></svg>"
+        r = await client.post(
+            "/api/v1/svg/validate",
+            json={"svg_content": bad, "svg_type": "flowchart"},
+        )
+        assert r.status_code == 200
+        assert r.json().get("valid") is False
+
+
 class TestSVGTemplateFiles:
     def test_seven_template_files_exist(self) -> None:
         svc = SVGGeneratorService()
