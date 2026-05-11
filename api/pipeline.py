@@ -2,7 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.dependencies import require_role
+from auth.dependencies import require_role, optional_user
+from auth.policy import policy_require
+from auth.audit import log_with_ontology
 from database import get_db
 from schemas.software import (
     PipelineFixRequest,
@@ -43,7 +45,7 @@ async def pipeline_generate(
         False,
         description="True 이면 생성 코드를 generated/snippets 에 쓰고 git commit",
     ),
-    _: dict = Depends(require_role("developer", "admin")),
+    _: dict = Depends(policy_require("autonogada", "generate")),
 ) -> PipelineRunResponse:
     try:
         out = await _runner.generate(
@@ -81,7 +83,10 @@ async def pipeline_languages() -> PipelineLanguagesResponse:
     response_model=PipelineValidateResponse,
     summary="폴리glot 문법 검증 + POLYGLOT Ontology(선택)",
 )
-async def pipeline_validate(req: PipelineValidateRequest) -> PipelineValidateResponse:
+async def pipeline_validate(
+    req: PipelineValidateRequest,
+    user: dict | None = Depends(optional_user),
+) -> PipelineValidateResponse:
     from config import get_settings
 
     settings = get_settings()
@@ -102,6 +107,19 @@ async def pipeline_validate(req: PipelineValidateRequest) -> PipelineValidateRes
     valid = syn.valid and (ont_pass is not False)
     if req.ontology and ont_pass is False:
         valid = False
+
+    log_with_ontology(
+        (user or {}).get("user_id") or "anonymous",
+        "POST /api/v1/pipeline/validate",
+        {
+            "passed": valid,
+            "ontology_passed": ont_pass,
+            "summary": ont_sum,
+            "code": req.code[:4000],
+        },
+        redis_url=(settings.redis_url or "").strip() or None,
+    )
+
     return PipelineValidateResponse(
         valid=valid,
         syntax_errors=syn.syntax_errors,

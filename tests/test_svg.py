@@ -17,6 +17,15 @@ from services.svg_generator import (
 from llm.base import LLMResponse, LLMProvider, ModelRole
 
 
+async def _dev_headers(client: AsyncClient) -> dict[str, str]:
+    r = await client.post(
+        "/api/v1/auth/token",
+        data={"username": "developer", "password": "dev123"},
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
 _MIN_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" width="120" height="80">'
     '<rect fill="#e2e8f0" width="120" height="80" stroke="#64748b"/>'
@@ -145,6 +154,7 @@ class TestSVGAPI:
                     "style": {},
                     "cache": False,
                 },
+                headers=await _dev_headers(client),
             )
         assert r.status_code == 200, r.text
         j = r.json()

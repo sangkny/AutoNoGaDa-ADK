@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth.policy import policy_require
 from database import get_db
 from models.svg_generation import SvgGeneration
 from schemas.svg import (
@@ -58,6 +59,7 @@ def _ontology_errors_to_dict(vr: Any) -> tuple[list[dict], list[dict]]:
 async def svg_generate(
     req: SVGGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    _: dict = Depends(policy_require("autonogada", "svg")),
 ) -> SVGGenerateResponse:
     try:
         out = await _svc.generate(
