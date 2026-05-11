@@ -24,6 +24,7 @@ from agents.context_chunking import (
     chunking_metrics_snapshot,
 )
 from agents.orchestrator import Orchestrator, OrchestraStrategy
+from observability.prom_metrics import observe_chunking_snapshot
 from ontology.base import OntologyDomain
 
 from models.software import SoftwareLoreDecision
@@ -135,17 +136,23 @@ class ArchitectureDecider:
                 if not _analysis.fits_context
                 else []
             )
-            log.info(
-                "adk_architecture_context",
-                extra=chunking_metrics_snapshot(
-                    _analysis,
-                    _chunks,
-                    extra={
-                        "flow": "adk_architecture_decision",
-                        "decision_id": decision_id,
-                        "strategy": str(orch.strategy.value),
-                    },
-                ),
+            _snap = chunking_metrics_snapshot(
+                _analysis,
+                _chunks,
+                extra={
+                    "flow": "adk_architecture_decision",
+                    "decision_id": decision_id,
+                    "strategy": str(orch.strategy.value),
+                },
+            )
+            log.info("adk_architecture_context", extra=_snap)
+            # Step 4 — Prometheus 텍스트 포맷 export (best-effort, 거동 영향 0)
+            observe_chunking_snapshot(
+                _snap,
+                service="adk_arch",
+                flow="adk_architecture_decision",
+                strategy=str(orch.strategy.value),
+                domain="software",
             )
         except Exception as _ctxe:
             log.debug("[chunking_metrics] 관측 한 줄 로깅 실패(무시): %s", _ctxe)

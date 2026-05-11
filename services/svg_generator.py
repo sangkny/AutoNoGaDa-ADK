@@ -27,6 +27,7 @@ from agents.context_chunking import (
 )
 from llm.base import ModelRole
 from llm.client import LLMClient
+from observability.prom_metrics import observe_chunking_snapshot
 from ontology.validator import OntologyValidator
 
 from config import get_settings
@@ -202,18 +203,24 @@ class SVGGeneratorService:
                 if not _analysis.fits_context
                 else []
             )
-            log.info(
-                "adk_svg_context",
-                extra=chunking_metrics_snapshot(
-                    _analysis,
-                    _chunks,
-                    extra={
-                        "flow": "adk_svg_generation",
-                        "svg_type": svg_type,
-                        "template_chars": len(template[:12000]),
-                        "role": "fast",
-                    },
-                ),
+            _snap = chunking_metrics_snapshot(
+                _analysis,
+                _chunks,
+                extra={
+                    "flow": "adk_svg_generation",
+                    "svg_type": svg_type,
+                    "template_chars": len(template[:12000]),
+                    "role": "fast",
+                },
+            )
+            log.info("adk_svg_context", extra=_snap)
+            # Step 4 — Prometheus 텍스트 포맷 export (best-effort, 거동 영향 0)
+            observe_chunking_snapshot(
+                _snap,
+                service="adk_svg",
+                flow="adk_svg_generation",
+                strategy="fastest",
+                domain="svg",
             )
         except Exception as _ctxe:
             log.debug("[chunking_metrics] 관측 한 줄 로깅 실패(무시): %s", _ctxe)

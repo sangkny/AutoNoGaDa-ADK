@@ -5,3 +5,4 @@ anthropic>=0.28.0
 google-genai>=1.0.0
 python-dotenv>=1.0.0
 python-jose[cryptography]>=3.3.0
+prometheus-client>=0.20.0   # Step 4 — /metrics/prometheus 텍스트 포맷 노출
