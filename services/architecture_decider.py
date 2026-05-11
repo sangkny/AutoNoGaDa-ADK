@@ -1,8 +1,16 @@
-"""DEBATE 전략으로 아키텍처 선택안을 만들고 Lore 를 DB 에 남김."""
+"""DEBATE 전략으로 아키텍처 선택안을 만들고 Lore 를 DB 에 남김.
+
+관측(Phase 2 Month 3 — book §16.10.3 / §16.12 Step 3-b): Orchestrator 진입
+직전에 ``analyze_prompt_for_model`` + ``chunking_metrics_snapshot`` 으로
+입력 토큰 추정·청크 권장값을 한 줄 구조화 로그(``adk_architecture_context``)로
+흘린다. 거동 변경은 없으며, 이 로그는 Prometheus exporter(§16.12 중기)의
+입력이 된다. MEDI/CoOps 와 동일 키 집합을 내보내 3개 서비스 비교 가능.
+"""
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from typing import Any
@@ -10,12 +18,30 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.base import LoreEntry
+from agents.context_chunking import (
+    analyze_prompt_for_model,
+    chunk_prompt_for_model,
+    chunking_metrics_snapshot,
+)
 from agents.orchestrator import Orchestrator, OrchestraStrategy
 from ontology.base import OntologyDomain
 
 from models.software import SoftwareLoreDecision
 
 log = logging.getLogger("services.architecture_decider")
+
+
+def _dominant_model_label(strategy: OrchestraStrategy) -> str:
+    """
+    DEBATE/CONSENSUS 는 HEAVY 모델이 컨텍스트 임계로 작동한다.
+    env 우선순위는 shared-libraries 의 ``llm/providers/local.py`` 와 동일하게
+    ``LOCAL_HEAVY_MODEL`` / ``LOCAL_FAST_MODEL`` 을 본다.
+    MEDI/CoOps 의 동명 헬퍼와 규칙 동일.
+    """
+    s = str(strategy.value if hasattr(strategy, "value") else strategy).lower()
+    if s in {"consensus", "debate"}:
+        return os.getenv("LOCAL_HEAVY_MODEL", "google/gemma-4-26b-a4b")
+    return os.getenv("LOCAL_FAST_MODEL", "google/gemma-4-e4b")
 
 _REC_PATTERN = re.compile(
     r"RECOMMENDATION:\s*(.+?)(?:\n|$)",
@@ -96,6 +122,33 @@ class ArchitectureDecider:
             task_id=decision_id[:8],
         )
         task_body = _build_debate_task(requirement)
+
+        # ── 컨텍스트 청킹 메트릭 관측 (book §16.10.3 / §16.12 Step 3-b) ────────
+        # 거동은 바꾸지 않고, 한 번의 호출에 대해 ``chunking_*`` 표준 11종 키를
+        # 한 줄 로그로 흘린다. 호출자 메타데이터(decision_id, strategy)는
+        # ``extra`` 로 병합한다. MEDI/CoOps 와 키 집합이 1:1 일치한다.
+        try:
+            _model_label = _dominant_model_label(orch.strategy)
+            _analysis = analyze_prompt_for_model(task_body, model=_model_label)
+            _chunks = (
+                chunk_prompt_for_model(task_body, model=_model_label)
+                if not _analysis.fits_context
+                else []
+            )
+            log.info(
+                "adk_architecture_context",
+                extra=chunking_metrics_snapshot(
+                    _analysis,
+                    _chunks,
+                    extra={
+                        "flow": "adk_architecture_decision",
+                        "decision_id": decision_id,
+                        "strategy": str(orch.strategy.value),
+                    },
+                ),
+            )
+        except Exception as _ctxe:
+            log.debug("[chunking_metrics] 관측 한 줄 로깅 실패(무시): %s", _ctxe)
 
         try:
             result = await orch.execute(task_body)

@@ -1,9 +1,18 @@
-"""SVG 자동 생성 — LLM(FAST) + OntologyValidator(SVG 도메인) + Redis 캐시."""
+"""SVG 자동 생성 — LLM(FAST) + OntologyValidator(SVG 도메인) + Redis 캐시.
+
+관측(Phase 2 Month 3 — book §16.10.3 / §16.12 Step 3-b): LLM ``chat`` 호출
+직전에 ``analyze_prompt_for_model`` + ``chunking_metrics_snapshot`` 으로
+입력 토큰 추정·청크 권장값을 한 줄 구조화 로그(``adk_svg_context``)로 흘린다.
+거동 변경은 없으며, 이 로그는 Prometheus exporter(§16.12 중기)의 입력이 된다.
+MEDI/CoOps 와 동일 키 집합. (참고: SVG 생성은 단일 호출이라 청크 분할은
+권장되지 않고, fits_context=false 시 호출자가 description 을 줄여야 한다.)
+"""
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -11,6 +20,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from agents.context_chunking import (
+    analyze_prompt_for_model,
+    chunk_prompt_for_model,
+    chunking_metrics_snapshot,
+)
 from llm.base import ModelRole
 from llm.client import LLMClient
 from ontology.validator import OntologyValidator
@@ -175,6 +189,35 @@ class SVGGeneratorService:
             "[참고 템플릿 — 변수 플레이스홀더를 채우거나 구조를 재사용]\n"
             f"{template[:12000]}\n"
         )
+
+        # ── 컨텍스트 청킹 메트릭 관측 (book §16.10.3 / §16.12 Step 3-b) ────────
+        # 거동은 바꾸지 않고, 한 번의 호출에 대해 ``chunking_*`` 표준 11종 키를
+        # 한 줄 로그로 흘린다. FAST 모델 라벨 + svg_type 메타를 ``extra`` 로 병합.
+        # MEDI/CoOps 의 동명 헬퍼들과 키 집합 1:1 일치.
+        try:
+            _model_label = os.getenv("LOCAL_FAST_MODEL", "google/gemma-4-e4b")
+            _analysis = analyze_prompt_for_model(prompt, model=_model_label, system=system)
+            _chunks = (
+                chunk_prompt_for_model(prompt, model=_model_label)
+                if not _analysis.fits_context
+                else []
+            )
+            log.info(
+                "adk_svg_context",
+                extra=chunking_metrics_snapshot(
+                    _analysis,
+                    _chunks,
+                    extra={
+                        "flow": "adk_svg_generation",
+                        "svg_type": svg_type,
+                        "template_chars": len(template[:12000]),
+                        "role": "fast",
+                    },
+                ),
+            )
+        except Exception as _ctxe:
+            log.debug("[chunking_metrics] 관측 한 줄 로깅 실패(무시): %s", _ctxe)
+
         res = await self._llm.chat(
             prompt,
             role=ModelRole.FAST,
