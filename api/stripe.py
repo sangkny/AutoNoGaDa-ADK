@@ -26,6 +26,8 @@ from saas.schemas import (
     StripeCheckoutResponse,
     StripePlanMappingOut,
     StripePlanMappingRequest,
+    StripePortalRequest,
+    StripePortalResponse,
     StripeStatusResponse,
     StripeWebhookResponse,
 )
@@ -132,6 +134,30 @@ async def admin_set_plan_mapping(
     return StripePlanMappingOut(
         plan_code=body.plan_code, stripe_price_id=body.stripe_price_id
     )
+
+
+@router.post("/portal", response_model=StripePortalResponse)
+async def create_portal(
+    body: StripePortalRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(current_user_strict),
+) -> StripePortalResponse:
+    """Stripe Customer Portal session 생성 (B-7 Round 2)."""
+    try:
+        session = await adk_stripe.create_portal_session(
+            db,
+            user_id=str(user.get("user_id", "")),
+            return_url=body.return_url,
+        )
+    except StripeDisabled as e:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
+        ) from e
+    except ValueError as e:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, detail=str(e)
+        ) from e
+    return StripePortalResponse(session_id=session["id"], url=session["url"])
 
 
 @router.get(
