@@ -8,7 +8,7 @@ ORM 클래스 정의는 ``shared_libraries.saas.billing_models.make_billing_mode
 from __future__ import annotations
 
 from database import Base
-from saas import make_billing_models
+from saas import make_billing_models, make_stripe_models
 
 (
     BillingPlan,
@@ -17,9 +17,16 @@ from saas import make_billing_models
     BillingMonthlyUserUsage,
 ) = make_billing_models(Base, table_prefix="")
 
+# Stripe sidecar (B-7) — 토글 무관, 스키마는 항상 존재 (alembic adk007).
+StripePlanMapping, StripeSubscription = make_stripe_models(
+    Base, table_prefix=""
+)
+
 __all__ = [
     "BillingPlan",
     "BillingSubscription",
     "BillingUsageRecord",
     "BillingMonthlyUserUsage",
+    "StripePlanMapping",
+    "StripeSubscription",
 ]

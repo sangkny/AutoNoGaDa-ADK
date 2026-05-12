@@ -4,6 +4,7 @@ from .architecture import router as architecture_router
 from .auth import router as auth_router
 from .billing import router as billing_router
 from .cost import router as cost_router
+from .stripe import router as stripe_router
 from .knowledge import router as knowledge_router
 from .monitoring import dashboard_router, monitor_router
 from .ontology_dashboard import router as ontology_dashboard_router
@@ -18,6 +19,9 @@ api_router.include_router(pipeline_router, prefix="/pipeline", tags=["pipeline"]
 api_router.include_router(knowledge_router, prefix="/knowledge", tags=["knowledge"])
 api_router.include_router(cost_router, prefix="/cost", tags=["cost"])
 api_router.include_router(billing_router, prefix="/billing", tags=["billing"])
+api_router.include_router(
+    stripe_router, prefix="/billing/stripe", tags=["billing-stripe"]
+)
 api_router.include_router(svg_router, prefix="/svg", tags=["svg"])
 api_router.include_router(
     architecture_router,

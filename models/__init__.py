@@ -18,6 +18,8 @@ from .billing import (
     BillingPlan,
     BillingSubscription,
     BillingUsageRecord,
+    StripePlanMapping,
+    StripeSubscription,
 )
 
 __all__ = [
@@ -37,4 +39,7 @@ __all__ = [
     "BillingSubscription",
     "BillingUsageRecord",
     "BillingMonthlyUserUsage",
+    # Stripe sidecar (B-7)
+    "StripePlanMapping",
+    "StripeSubscription",
 ]

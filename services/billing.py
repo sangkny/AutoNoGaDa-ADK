@@ -16,8 +16,10 @@ from models.billing import (
     BillingPlan,
     BillingSubscription,
     BillingUsageRecord,
+    StripePlanMapping,
+    StripeSubscription,
 )
-from saas import BillingService
+from saas import BillingService, StripeConfig, StripeService
 from saas.helpers import (
     DEFAULT_FREE_PLAN_CODE,
     current_year_month,
@@ -25,13 +27,21 @@ from saas.helpers import (
     usage_snapshot_dict,
 )
 
-# ADK 도메인 BillingService 인스턴스 (shared 의 logic + ADK 의 ORM).
 adk_billing = BillingService(
     plan_cls=BillingPlan,
     subscription_cls=BillingSubscription,
     usage_record_cls=BillingUsageRecord,
     monthly_usage_cls=BillingMonthlyUserUsage,
     default_free_code=DEFAULT_FREE_PLAN_CODE,
+)
+
+# Stripe 어댑터 — env 토글 (``ADK_STRIPE_ENABLED`` 또는 ``STRIPE_ENABLED``).
+adk_stripe_config = StripeConfig.from_env(prefix="ADK_")
+adk_stripe = StripeService(
+    config=adk_stripe_config,
+    billing=adk_billing,
+    plan_mapping_cls=StripePlanMapping,
+    stripe_subscription_cls=StripeSubscription,
 )
 
 
@@ -73,6 +83,8 @@ async def get_or_create_monthly_usage(
 __all__ = [
     "DEFAULT_FREE_PLAN_CODE",
     "adk_billing",
+    "adk_stripe",
+    "adk_stripe_config",
     "current_year_month",
     "get_plan_by_code",
     "list_active_plans",
