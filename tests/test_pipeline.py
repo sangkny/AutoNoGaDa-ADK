@@ -74,6 +74,7 @@ async def test_pipeline_review_mocked(client: AsyncClient) -> None:
         r = await client.post(
             "/api/v1/pipeline/review",
             json={"code": ADD_SNIPPET, "language": "python"},
+            headers=await _dev_headers(client),
         )
     assert r.status_code == 200, r.text
     j = r.json()
@@ -99,6 +100,7 @@ async def test_pipeline_fix_mocked(client: AsyncClient) -> None:
                 "code": "def add(a,b): return",
                 "error_message": "return 값 없음",
             },
+            headers=await _dev_headers(client),
         )
     assert r.status_code == 200, r.text
     j = r.json()

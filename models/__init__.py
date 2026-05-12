@@ -13,6 +13,12 @@ from .adk_kb import (
     ModelUsageLog,
     MonthlyBudget,
 )
+from .billing import (
+    BillingMonthlyUserUsage,
+    BillingPlan,
+    BillingSubscription,
+    BillingUsageRecord,
+)
 
 __all__ = [
     "CodeTask",
@@ -26,4 +32,9 @@ __all__ = [
     "EMBED_DIM",
     "ModelUsageLog",
     "MonthlyBudget",
+    # SaaS 비즈니스 트랙 (Phase 2)
+    "BillingPlan",
+    "BillingSubscription",
+    "BillingUsageRecord",
+    "BillingMonthlyUserUsage",
 ]

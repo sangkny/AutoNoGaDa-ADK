@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +29,9 @@ from services.polyglot_executor import (
     normalize_language,
 )
 
+if TYPE_CHECKING:
+    from services.quota import QuotaContext
+
 log = logging.getLogger("services.pipeline_runner")
 
 
@@ -45,6 +48,7 @@ class PipelineRunner:
         language: str = "python",
         *,
         framework: str | None = None,
+        quota: "QuotaContext | None" = None,
     ) -> dict[str, Any]:
         """임시 CodeTask 를 만들고 PIPELINE 실행."""
         task = CodeTask(
@@ -56,7 +60,7 @@ class PipelineRunner:
         )
         db.add(task)
         await db.flush()
-        return await self.run_task(db, task, framework=framework)
+        return await self.run_task(db, task, framework=framework, quota=quota)
 
     async def run_task(
         self,
@@ -64,6 +68,7 @@ class PipelineRunner:
         task: CodeTask,
         *,
         framework: str | None = None,
+        quota: "QuotaContext | None" = None,
     ) -> dict[str, Any]:
         task.status = TaskStatusEnum.RUNNING
         await db.flush()
@@ -346,23 +351,52 @@ class PipelineRunner:
         *,
         auto_commit: bool = False,
         framework: str | None = None,
+        quota: "QuotaContext | None" = None,
     ) -> dict[str, Any]:
         """
         POST /pipeline/generate — 함수 설명 기반 코드 생성 + 품질 리포트.
 
         ``auto_commit`` 이 True 이면 생성 코드를 저장소 내 ``generated/snippets/`` 에
-        쓴 뒤 `git add` + `git commit` 한다 (Week 5 5-1-1).
+        쓴 뒤 `git add` + `git commit` 한다 (Week 5 5-1-1). ``quota`` 가 주어지면
+        호출 종료 후 ``services.quota.record_call`` 로 사용량을 기록한다 (B-4).
         """
-        payload = await self.run_inline(db, task, language, framework=framework)
-        if (
-            auto_commit and payload.get("output_code") and payload.get("status") != "failed"
-        ):
-            await self._try_git_commit_after_generate(
-                payload,
-                natural_task=task,
-                language=language,
+        t0 = time.perf_counter()
+        success = False
+        tokens_est = 0
+        model_used: str | None = None
+        try:
+            payload = await self.run_inline(db, task, language, framework=framework, quota=quota)
+            if (
+                auto_commit and payload.get("output_code") and payload.get("status") != "failed"
+            ):
+                await self._try_git_commit_after_generate(
+                    payload,
+                    natural_task=task,
+                    language=language,
+                )
+            success = bool(payload.get("ontology_passed")) or payload.get(
+                "status"
+            ) == TaskStatusEnum.COMPLETED.value
+            tokens_est = (
+                len(str(payload.get("output_code") or "")) // 4 + len(task) // 4
             )
-        return payload
+            model_used = "local/e4b-pipeline"
+            return payload
+        finally:
+            if quota is not None:
+                try:
+                    from services.quota import record_call
+
+                    await record_call(
+                        db,
+                        quota,
+                        success=success,
+                        model_used=model_used,
+                        tokens_estimated=tokens_est,
+                        latency_ms=int((time.perf_counter() - t0) * 1000.0),
+                    )
+                except Exception:
+                    log.warning("billing usage 기록 실패 (generate)", exc_info=True)
 
     async def _try_git_commit_after_generate(
         self,
@@ -406,62 +440,116 @@ class PipelineRunner:
         code: str,
         language: str = "python",
         context: str | None = None,
+        *,
+        quota: "QuotaContext | None" = None,
+        db: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """
-        POST /pipeline/review — HEAVY ReviewerAgent 로 코드 리뷰.
+        POST /pipeline/review — HEAVY ReviewerAgent 로 코드 리뷰. ``quota`` 가
+        주어지면 호출 종료 후 ``services.quota.record_call`` 로 사용량을 기록한다.
         """
-        reviewer = ReviewerAgent(domain=OntologyDomain.SOFTWARE)
-        hint     = context or "제공된 코드의 품질·보안·파이썬 관례를 검토하세요."
-        res      = await reviewer.run(
-            hint,
-            context={"generated": code, "iteration": 0},
-        )
-        if not res.success:
-            return {
-                "passed":         False,
-                "feedback":       res.error or "reviewer 실패",
-                "llm_review":     "",
-                "ontology_passed": None,
-                "ontology_summary": "",
-            }
+        t0 = time.perf_counter()
+        success = False
+        tokens_est = 0
+        try:
+            reviewer = ReviewerAgent(domain=OntologyDomain.SOFTWARE)
+            hint     = context or "제공된 코드의 품질·보안·파이썬 관례를 검토하세요."
+            res      = await reviewer.run(
+                hint,
+                context={"generated": code, "iteration": 0},
+            )
+            tokens_est = len(code or "") // 4 + len(hint or "") // 4
+            if not res.success:
+                return {
+                    "passed":         False,
+                    "feedback":       res.error or "reviewer 실패",
+                    "llm_review":     "",
+                    "ontology_passed": None,
+                    "ontology_summary": "",
+                }
 
-        review_out: ReviewResult = res.output
-        vr_meta   = await self._analyzer.validate_snippet(code, language)
-        return {
-            "passed":            review_out.passed,
-            "feedback":          review_out.feedback,
-            "llm_review":        review_out.llm_review,
-            "ontology_passed":   bool(vr_meta.passed),
-            "ontology_summary":  vr_meta.summary,
-        }
+            review_out: ReviewResult = res.output
+            vr_meta   = await self._analyzer.validate_snippet(code, language)
+            success = bool(review_out.passed) and bool(vr_meta.passed)
+            return {
+                "passed":            review_out.passed,
+                "feedback":          review_out.feedback,
+                "llm_review":        review_out.llm_review,
+                "ontology_passed":   bool(vr_meta.passed),
+                "ontology_summary":  vr_meta.summary,
+            }
+        finally:
+            if quota is not None and db is not None:
+                try:
+                    from services.quota import record_call
+
+                    await record_call(
+                        db,
+                        quota,
+                        success=success,
+                        model_used="reviewer-heavy",
+                        tokens_estimated=tokens_est,
+                        latency_ms=int((time.perf_counter() - t0) * 1000.0),
+                    )
+                except Exception:
+                    log.warning("billing usage 기록 실패 (review)", exc_info=True)
 
     async def fix_code(
         self,
         code: str,
         error_message: str,
         context: str | None = None,
+        *,
+        quota: "QuotaContext | None" = None,
+        db: AsyncSession | None = None,
     ) -> dict[str, Any]:
         """
         POST /pipeline/fix — FixerAgent 로 오류/피드백 기반 수정 코드 생성.
+        ``quota`` 가 주어지면 호출 종료 후 ``services.quota.record_call`` 로 사용량을 기록한다.
         """
-        review_stub = ReviewResult(
-            passed=False,
-            feedback=error_message,
-            ontology_result=None,
-        )
-        fixer = FixerAgent(domain=OntologyDomain.SOFTWARE)
-        task  = context or "주어진 오류를 해결하도록 코드를 수정하세요."
-        res   = await fixer.run(
-            task,
-            context={
-                "generated": code,
-                "review":    review_stub,
-                "iteration": 1,
-            },
-        )
-        if not res.success:
-            return {"fixed_code": None, "error": res.error or "fixer 실패"}
-        return {"fixed_code": str(res.output).strip(), "error": None}
+        t0 = time.perf_counter()
+        success = False
+        tokens_est = 0
+        try:
+            review_stub = ReviewResult(
+                passed=False,
+                feedback=error_message,
+                ontology_result=None,
+            )
+            fixer = FixerAgent(domain=OntologyDomain.SOFTWARE)
+            task  = context or "주어진 오류를 해결하도록 코드를 수정하세요."
+            res   = await fixer.run(
+                task,
+                context={
+                    "generated": code,
+                    "review":    review_stub,
+                    "iteration": 1,
+                },
+            )
+            tokens_est = (
+                len(code or "") // 4
+                + len(error_message or "") // 4
+                + len(str(res.output or "")) // 4
+            )
+            if not res.success:
+                return {"fixed_code": None, "error": res.error or "fixer 실패"}
+            success = True
+            return {"fixed_code": str(res.output).strip(), "error": None}
+        finally:
+            if quota is not None and db is not None:
+                try:
+                    from services.quota import record_call
+
+                    await record_call(
+                        db,
+                        quota,
+                        success=success,
+                        model_used="fixer",
+                        tokens_estimated=tokens_est,
+                        latency_ms=int((time.perf_counter() - t0) * 1000.0),
+                    )
+                except Exception:
+                    log.warning("billing usage 기록 실패 (fix)", exc_info=True)
 
     async def load_task(self, db: AsyncSession, task_id: str) -> CodeTask | None:
         return await db.scalar(select(CodeTask).where(CodeTask.id == task_id))

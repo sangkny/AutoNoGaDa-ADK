@@ -26,6 +26,7 @@ from services.polyglot_executor import (
     list_supported_languages,
     normalize_language,
 )
+from services.quota import QuotaContext, enforce_quota
 
 router = APIRouter()
 _runner = PipelineRunner()
@@ -46,6 +47,7 @@ async def pipeline_generate(
         description="True 이면 생성 코드를 generated/snippets 에 쓰고 git commit",
     ),
     _: dict = Depends(policy_require("autonogada", "generate")),
+    quota: QuotaContext = Depends(enforce_quota("generate")),
 ) -> PipelineRunResponse:
     try:
         out = await _runner.generate(
@@ -54,6 +56,7 @@ async def pipeline_generate(
             req.language,
             auto_commit=auto_commit,
             framework=req.framework,
+            quota=quota,
         )
         return PipelineRunResponse(**out)
     except ValueError as e:
@@ -134,9 +137,15 @@ async def pipeline_validate(
     response_model=PipelineReviewResponse,
     summary="코드 리뷰 (ReviewerAgent HEAVY)",
 )
-async def pipeline_review(req: PipelineReviewRequest) -> PipelineReviewResponse:
+async def pipeline_review(
+    req: PipelineReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    quota: QuotaContext = Depends(enforce_quota("review")),
+) -> PipelineReviewResponse:
     try:
-        out = await _runner.review_code(req.code, req.language, req.context)
+        out = await _runner.review_code(
+            req.code, req.language, req.context, quota=quota, db=db
+        )
         return PipelineReviewResponse(**out)
     except Exception as e:
         raise HTTPException(
@@ -150,9 +159,15 @@ async def pipeline_review(req: PipelineReviewRequest) -> PipelineReviewResponse:
     response_model=PipelineFixResponse,
     summary="코드 자동 수정 (FixerAgent)",
 )
-async def pipeline_fix(req: PipelineFixRequest) -> PipelineFixResponse:
+async def pipeline_fix(
+    req: PipelineFixRequest,
+    db: AsyncSession = Depends(get_db),
+    quota: QuotaContext = Depends(enforce_quota("fix")),
+) -> PipelineFixResponse:
     try:
-        out = await _runner.fix_code(req.code, req.error_message, req.context)
+        out = await _runner.fix_code(
+            req.code, req.error_message, req.context, quota=quota, db=db
+        )
         return PipelineFixResponse(**out)
     except Exception as e:
         raise HTTPException(
